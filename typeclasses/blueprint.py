@@ -91,6 +91,8 @@ class CmdPlan(Command):
             self._check_room(blueprint, args[6:].strip())
         elif args.lower().startswith("note "):
             self._add_note(blueprint, args[5:].strip())
+        elif args.lower().startswith("tag "):
+            self._add_tag(blueprint, args[4:].strip())
         elif args.lower() == "resume":
             self._resume(blueprint)
         elif args.lower() == "export":
@@ -129,6 +131,8 @@ class CmdPlan(Command):
                 d = entry["desc"]
                 preview = d[:60] + "..." if len(d) > 60 else d
                 self.caller.msg(f"       |xDesc: {preview}|n")
+            if entry.get("tag"):
+                self.caller.msg(f"       |yRef: {entry['tag']}|n")
             if entry.get("note"):
                 self.caller.msg(f"       |cNote: {entry['note']}|n")
 
@@ -147,6 +151,7 @@ class CmdPlan(Command):
   |wplan desc <room> = <text>|n   - set the planned description for a room
   |wplan check <room>|n           - mark room complete (auto-records current dbref)
   |wplan note <room> = <text>|n   - attach a note to a room entry
+  |wplan tag <room> = <tag>|n     - set a module reference tag (e.g. B7, Cave 1A)
   |wplan resume|n                 - teleport to the next incomplete room
   |wplan export|n                 - output a valid .ev batchcmds file
   |wplan finish|n                 - seal the blueprint when area is complete
@@ -217,6 +222,21 @@ class CmdPlan(Command):
         else:
             self.caller.msg("You don't seem to be in a room. Can't record dbref.")
 
+    def _add_tag(self, blueprint, args):
+        if "=" not in args:
+            self.caller.msg("Usage: plan tag <room> = <tag>")
+            return
+        room_name, _, tag_text = args.partition("=")
+        room_name = room_name.strip()
+        tag_text = tag_text.strip()
+        entry = _find_room_entry(blueprint, room_name)
+        if not entry:
+            self.caller.msg(f"No room matching '{room_name}' found in blueprint.")
+            return
+        entry["tag"] = tag_text
+        blueprint.db.rooms = blueprint.db.rooms
+        self.caller.msg(f"Tag |y{tag_text}|n set for |w{entry['name']}|n.")
+
     def _add_note(self, blueprint, args):
         if "=" not in args:
             self.caller.msg("Usage: plan note <room> = <note text>")
@@ -269,7 +289,8 @@ class CmdPlan(Command):
             lines.append("")
 
         for entry in rooms:
-            lines.append(f"# --- {entry['name']} ---")
+            tag = f" [{entry['tag']}]" if entry.get("tag") else ""
+            lines.append(f"# --- {entry['name']}{tag} ---")
             dbref = entry.get("dbref")
             if dbref:
                 lines.append(f"@tel #{dbref}")
